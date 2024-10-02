@@ -82,7 +82,7 @@ class UsersController {
       // Find the user in the database
       const user = await dbClient.db.collection('users').findOne(
         { _id: objectId },
-        { projection: { email: 1 } }
+        { projection: { email: 1 } },
       );
 
       if (!user) {
