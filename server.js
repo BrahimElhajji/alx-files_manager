@@ -1,7 +1,11 @@
 // server.js
 
 import express from 'express';
+import dotenv from 'dotenv';
 import routes from './routes/index';
+
+// Load environment variables from .env file
+dotenv.config();
 
 // Initialize express app
 const app = express();
