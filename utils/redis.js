@@ -6,9 +6,7 @@ class RedisClient {
     this.client = redis.createClient();
 
     // Handle connection errors
-    this.client.on('error', (err) =>
-      console.error(`Redis client not connected to the server: ${err}`)
-    );
+    this.client.on('error', (err) => console.error(`Redis client not connected to the server: ${err}`));
 
     // Promisify Redis client methods for async/await usage
     this.getAsync = promisify(this.client.get).bind(this.client);
@@ -57,4 +55,3 @@ class RedisClient {
 // Create and export an instance of RedisClient
 const redisClient = new RedisClient();
 export default redisClient;
-
