@@ -1,6 +1,6 @@
 // utils/db.js
 
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 
 // Environment variables for MongoDB connection
 const host = process.env.DB_HOST || 'localhost';
@@ -16,12 +16,14 @@ class DBClient {
     this.client = new MongoClient(url, { useUnifiedTopology: true });
 
     // Connect to MongoDB
-    this.client.connect().then(() => {
-      this.db = this.client.db(dbName);
-      console.log('Connected to MongoDB');
-    }).catch((err) => {
-      console.error(`Failed to connect to MongoDB: ${err}`);
-    });
+    this.client.connect()
+      .then(() => {
+        this.db = this.client.db(dbName);
+        console.log('Connected to MongoDB');
+      })
+      .catch((err) => {
+        console.error(`Failed to connect to MongoDB: ${err}`);
+      });
   }
 
   // Check if MongoDB is alive (connected)
@@ -44,6 +46,9 @@ class DBClient {
     }
     return this.db.collection('files').countDocuments();
   }
+
+  // Expose ObjectId for use in controllers
+  ObjectId = ObjectId;
 }
 
 const dbClient = new DBClient();
