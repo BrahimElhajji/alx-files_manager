@@ -46,11 +46,8 @@ class DBClient {
     }
     return this.db.collection('files').countDocuments();
   }
-
-  // Expose ObjectId for use in controllers
-  ObjectId = ObjectId;
 }
 
 const dbClient = new DBClient();
 
-export default dbClient;
+export { dbClient, ObjectId };

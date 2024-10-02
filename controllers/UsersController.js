@@ -1,7 +1,7 @@
 // controllers/UsersController.js
 
 import sha1 from 'sha1';
-import dbClient from '../utils/db';
+import { dbClient, ObjectId } from '../utils/db';
 import redisClient from '../utils/redis';
 
 class UsersController {
@@ -77,12 +77,12 @@ class UsersController {
       }
 
       // Convert the string ID to ObjectId
-      const objectId = dbClient.ObjectId(userId);
+      const objectId = new ObjectId(userId);
 
       // Find the user in the database
       const user = await dbClient.db.collection('users').findOne(
         { _id: objectId },
-        { projection: { email: 1 } },
+        { projection: { email: 1 } }
       );
 
       if (!user) {
