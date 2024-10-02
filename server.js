@@ -1,8 +1,13 @@
+// server.js
+
 import express from 'express';
 import routes from './routes/index';
 
 // Initialize express app
 const app = express();
+
+// Middleware to parse JSON bodies
+app.use(express.json());
 
 // Load routes
 app.use('/', routes);
