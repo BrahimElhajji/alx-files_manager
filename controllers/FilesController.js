@@ -147,8 +147,8 @@ class FilesController {
       return res.status(500).json({ error: 'Internal Server Error' });
     }
   }
-}
-   /**
+
+  /**
    * PUT /files/:id/publish
    * Set isPublic to true for the file based on ID
    */
@@ -176,7 +176,7 @@ class FilesController {
 
       await dbClient.db.collection('files').updateOne(
         { _id: new ObjectId(fileId), userId },
-        { $set: { isPublic: true } }
+        { $set: { isPublic: true } },
       );
 
       const updatedFile = await dbClient.db.collection('files').findOne({ _id: new ObjectId(fileId), userId });
@@ -216,7 +216,7 @@ class FilesController {
 
       await dbClient.db.collection('files').updateOne(
         { _id: new ObjectId(fileId), userId },
-        { $set: { isPublic: false } }
+        { $set: { isPublic: false } },
       );
 
       const updatedFile = await dbClient.db.collection('files').findOne({ _id: new ObjectId(fileId), userId });
