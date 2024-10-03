@@ -1,152 +1,94 @@
-// controllers/FilesController.js
-
-import { v4 as uuidv4 } from 'uuid';
-import { ObjectId } from 'mongodb';
-import fs from 'fs';
-import { dbClient } from '../utils/db';
-import redisClient from '../utils/redis';
-
+const { v4: uuidv4 } = require('uuid');
+const fs = require('fs');
+const path = require('path');
+const mime = require('mime-types');
+const dbClient = require('../utils/db'); // Assuming dbClient is set up for MongoDB
 const FOLDER_PATH = process.env.FOLDER_PATH || '/tmp/files_manager';
+const { ObjectId } = require('mongodb');
 
 class FilesController {
   static async postUpload(req, res) {
-    const token = req.headers['x-token'];
+    const { name, type, parentId = 0, isPublic = false, data } = req.body;
+    const user = req.user; // Assuming user is set in req from authentication middleware
 
-    // Validate the token
-    if (!token) {
+    if (!user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const userId = await redisClient.get(`auth_${token}`);
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+    if (!name) {
+      return res.status(400).json({ error: 'Missing name' });
     }
 
-    const {
-      name, type, parentId = 0, isPublic = false, data,
-    } = req.body;
+    if (!type || !['folder', 'file', 'image'].includes(type)) {
+      return res.status(400).json({ error: 'Missing type' });
+    }
 
-    // Validate required fields
-    if (!name) return res.status(400).json({ error: 'Missing name' });
-    if (!['folder', 'file', 'image'].includes(type)) return res.status(400).json({ error: 'Missing type' });
-    if (type !== 'folder' && !data) return res.status(400).json({ error: 'Missing data' });
+    if (type !== 'folder' && !data) {
+      return res.status(400).json({ error: 'Missing data' });
+    }
 
-    // Check if parentId is valid
+    // Validate parentId if provided
+    let parentDoc = null;
     if (parentId !== 0) {
-      const parent = await dbClient.db.collection('files').findOne({ _id: parentId });
-      if (!parent) return res.status(400).json({ error: 'Parent not found' });
-      if (parent.type !== 'folder') return res.status(400).json({ error: 'Parent is not a folder' });
-    }
-
-    let localPath = null;
-
-    // Handle file or image types
-    if (type !== 'folder') {
-      if (!fs.existsSync(FOLDER_PATH)) {
-        fs.mkdirSync(FOLDER_PATH, { recursive: true });
+      try {
+        parentDoc = await dbClient.db.collection('files').findOne({ _id: ObjectId(parentId) });
+        if (!parentDoc) {
+          return res.status(400).json({ error: 'Parent not found' });
+        }
+        if (parentDoc.type !== 'folder') {
+          return res.status(400).json({ error: 'Parent is not a folder' });
+        }
+      } catch (err) {
+        return res.status(400).json({ error: 'Invalid parentId' });
       }
-
-      const filePath = `${FOLDER_PATH}/${uuidv4()}`;
-      const fileData = Buffer.from(data, 'base64');
-      fs.writeFileSync(filePath, fileData);
-      localPath = filePath;
     }
 
-    // Prepare the new file document
-    const newFile = {
-      userId,
+    const fileDocument = {
+      userId: ObjectId(user._id),
       name,
       type,
       isPublic,
-      parentId,
-      localPath,
+      parentId: parentId === 0 ? '0' : ObjectId(parentId),
     };
 
-    // Insert the new file document into the database
-    const result = await dbClient.db.collection('files').insertOne(newFile);
+    if (type === 'folder') {
+      // Create folder
+      try {
+        const result = await dbClient.db.collection('files').insertOne(fileDocument);
+        return res.status(201).json({
+          id: result.insertedId,
+          ...fileDocument,
+        });
+      } catch (err) {
+        return res.status(500).json({ error: 'Cannot create folder' });
+      }
+    } else {
+      // Handle file and image types
+      const fileName = uuidv4();
+      const localPath = path.join(FOLDER_PATH, fileName);
+      const buffer = Buffer.from(data, 'base64');
 
-    // Return the newly created file document
-    return res.status(201).json({
-      id: result.insertedId,
-      userId,
-      name,
-      type,
-      isPublic,
-      parentId,
-      localPath,
-    });
-  }
-
-  /**
-   * GET /files/:id
-   * Retrieves a file document by ID
-   */
-  static async getShow(req, res) {
-    const token = req.headers['x-token'];
-
-    // Validate the token
-    if (!token) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const userId = await redisClient.get(`auth_${token}`);
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const fileId = req.params.id;
-
-    try {
-      const file = await dbClient.db.collection('files').findOne({ _id: new ObjectId(fileId), userId });
-
-      if (!file) {
-        return res.status(404).json({ error: 'Not found' });
+      // Store the file locally
+      try {
+        fs.mkdirSync(FOLDER_PATH, { recursive: true });
+        fs.writeFileSync(localPath, buffer);
+      } catch (err) {
+        return res.status(500).json({ error: 'Cannot save file' });
       }
 
-      // Return the file document
-      return res.status(200).json(file);
-    } catch (error) {
-      console.error('Error fetching file by ID:', error);
-      return res.status(500).json({ error: 'Internal Server Error' });
-    }
-  }
+      fileDocument.localPath = localPath;
 
-  /**
-   * GET /files
-   * Retrieves all file documents for a specific parentId with pagination
-   */
-  static async getIndex(req, res) {
-    const token = req.headers['x-token'];
-
-    // Validate the token
-    if (!token) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const userId = await redisClient.get(`auth_${token}`);
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const parentId = req.query.parentId || 0;
-    const page = parseInt(req.query.page, 10) || 0;
-    const pageSize = 20;
-    const skip = page * pageSize;
-
-    try {
-      const files = await dbClient.db.collection('files')
-        .find({ userId, parentId })
-        .skip(skip)
-        .limit(pageSize)
-        .toArray();
-
-      // Return the list of files (empty list if none found)
-      return res.status(200).json(files);
-    } catch (error) {
-      console.error('Error fetching files with pagination:', error);
-      return res.status(500).json({ error: 'Internal Server Error' });
+      try {
+        const result = await dbClient.db.collection('files').insertOne(fileDocument);
+        return res.status(201).json({
+          id: result.insertedId,
+          ...fileDocument,
+        });
+      } catch (err) {
+        return res.status(500).json({ error: 'Cannot create file' });
+      }
     }
   }
 }
 
-export default FilesController;
+module.exports = FilesController;
